@@ -90,7 +90,7 @@ class Card:
                         if payed < len(self.cost):
                             print("Failed to pay {}, with {}".format(self.cost, env['mana_pool']))
                             raise ValueError("Couldn't play the card")
-        print("Playing {}, free: {}".format(self.name, free))
+        # print("Playing {}, free: {}".format(self.name, free))
         for effect in self.play_effects:
             effect(env)
         return env['mana_pool']
@@ -243,7 +243,7 @@ def alhammarret_effect(env):
 
 def genesis_wave_effect(env):
     quantity = 5 + len(env['mana_pool'])
-    for i in quantity:
+    for i in range(quantity):
         card = None
         try:
             card = env['library'].pop(0)
@@ -298,7 +298,7 @@ def create_cards():
                 'Elvish Mystic':  Card(cost=[G], managen=[G], delay=1, survival_chance=0.8),
                 'Boreal Druid':  Card(cost=[G], managen=[C], delay=1, survival_chance=0.8),
                 'Nissa, Worldwaker': Card(cost=[1, 1, 1, G, G],
-                                          turn_effect=[untap_forest]*4,
+                                          turn_effects=[untap_forest]*4,
                                           survival_chance=0.67),
                 "Diviner's Wand": Card(cost=[1, 1, 1, 1, 1, 1],
                                        turn_effects=[add_draw_spell(4, repeatable=True)],
@@ -306,7 +306,7 @@ def create_cards():
                 "Mind's Eye": Card(cost=[1, 1, 1, 1, 1], turn_effects=[add_draw_spell(1)]*3,
                                    survival_chance=0.85),
                 "Mikokoro, Center of the Sea": Card(turn_effects=[add_draw_spell(3)],
-                                                    mana_gen=[C], is_land=True),
+                                                    managen=[C], is_land=True),
                 "Gaea's Touch": Card(cost=[G, G], turn_effects=[increase_land_plays(1)],
                                      survival_chance=0.95),
                 'Temple Bell': Card(cost=[1, 1, 1], turn_effects=[draw_cards_effect(1)],
@@ -403,7 +403,7 @@ def play_order(playable):
 def main(argv=None):
     if not argv:
         argv = sys.argv
-    num_iterations = 50
+    num_iterations = 500
     num_turns = 10
 
     if len(argv) < 2:
@@ -422,9 +422,10 @@ def main(argv=None):
         for line in deck_file:
             if line.startswith('SB:'):
                 trash, quantity, *parts = line.split() # noqa
-                commander = cards.get(' '.join(parts),
-                                      FillerCard(name='Filler'))
+                card_name = ' '.join(parts)
+                commander = cards.get(card_name, FillerCard(name='Filler'))
                 commander.is_commander = True
+                commander.name = card_name
                 continue
             quantity, *parts = line.split()
             card_name = ' '.join(parts)
@@ -479,6 +480,11 @@ def main(argv=None):
             draw_cards(env, 1)
             env['mana_pool'] = []
             env['land_plays'] = 1
+
+            to_remove = [card for card in env['hand'] if card.name == 'Draw Spell']
+            for card in to_remove:
+                env['hand'].remove(card)
+            
             for card in env['played_cards']:
                 # print('{} is in Play'.format(card))
                 for effect in card.turn_effects:
@@ -516,6 +522,8 @@ def main(argv=None):
             excess_mana[turn] += len(env['mana_pool'])/num_iterations
             generated_mana[turn][iteration] = mana_generated
             max_mana = max(max_mana, mana_generated)
+
+            env['hand'] = env['hand'][:7]
 
             dead_cards = []
             for card in env['played_cards']:
