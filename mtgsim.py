@@ -89,7 +89,8 @@ class Card:
                         if payed < len(self.cost):
                             print("Failed to pay {}, with {}".format(self.cost, env['mana_pool']))
                             raise ValueError("Couldn't play the card")
-        # print("Playing {}, free: {}".format(self.name, free))
+        if env['example']:
+            print("Playing {}".format(self.name))
         for effect in self.play_effects:
             effect(env)
         env['cards_played'].append((self.name, env['turn']))
@@ -254,6 +255,14 @@ def genesis_wave_effect(env):
         card.generate_mana(env)
 
 
+def search_land(env):
+    for card in env['library']:
+        if card.is_land:
+            env['hand'].append(card)
+            env['library'].remove(card)
+            break
+
+
 def create_cards():
     W = 'W'
     U = 'U'
@@ -356,6 +365,11 @@ def create_cards():
                 'Genesis Wave': Card(cost=[G, G, G, 1, 1, 1, 1, 1],
                                      play_effects=[genesis_wave_effect],
                                      survival_chance=0),
+                "Renegade Map": Card(cost=[1],
+                                     turn_effects=[kill_card('Renegade Map'),
+                                                   search_land]),
+                "Resourceful Return": Card(cost=[1, B], survival_chance=0,
+                                           play_effects=[draw_cards_effect(1)]),
                 # Filler Cards
                 "Concordant Crossroads": Card(cost=[G], survival_chance=0),
                 "Akroma's Memorial": Card(cost=[1]*7, survival_chance=0),
@@ -374,13 +388,40 @@ def create_cards():
                 "Kamahl, Fist of Krosa": Card(cost=[1, 1, 1, 1, G, G], survival_chance=0),
                 "Psychosis Crawler": Card(cost=[1, 1, 1, 1, 1], survival_chance=0),
                 "Omnath, Locus of Mana": Card(cost=[1, 1, G], survival_chance=0),
-                "Ant Queen": Card(cost=[1, 1, 1, G, G], survival_chance=0)
+                "Ant Queen": Card(cost=[1, 1, 1, G, G], survival_chance=0),
+                "Mobile Garrison": Card(cost=[1, 1, 1], survival_chance=0),
+                "Greenwheel Liberator": Card(cost=[1, G], survival_chance=0),
+                "Renegade's Getaway": Card(cost=[1, 1, B], survival_chance=0),
+                "Scrounging Bandar": Card(cost=[1, G], survival_chance=0),
+                "Servo Schematic": Card(cost=[1, G], survival_chance=0),
+                "Maulfist Squad": Card(cost=[1, 1, 1, B], survival_chance=0),
+                "Lifecraft Cavalry": Card(cost=[1, 1, 1, 1, G], survival_chance=0),
+                "Walking Ballista": Card(survival_chance=0),
+                "Ghirapur Guide": Card(cost=[1, 1, G], survival_chance=0),
+                "Aetherwind Basker": Card(cost=[1, 1, 1, 1, G, G, G], survival_chance=0),
+                "Daring Demolition": Card(cost=[1, 1, B, B], survival_chance=0),
+                "Implement of Ferocity": Card(cost=[1], survival_chance=0),
+                "Longtusk Cub": Card(cost=[1, G], survival_chance=0),
+                "Untethered Express": Card(cost=[1, 1, 1, 1], survival_chance=0),
+                "Consulate Turret": Card(cost=[1, 1, 1], survival_chance=0),
+                "Aether Herder": Card(cost=[1, 1, 1, G], survival_chance=0),
+                "Die Young": Card(cost=[1, B], survival_chance=0),
+                "Natural Obsolescence": Card(cost=[1, G], survival_chance=0),
+                "Eager Construct": Card(cost=[1, 1], survival_chance=0),  # Add Scry Eventually
+                "Fourth Bridge Prowler": Card(cost=[B], survival_chance=0),
+                "Lifecrafter's Gift": Card(cost=[1, 1, 1, G], survival_chance=0),
+                "Winding Constrictor": Card(cost=[B, G], survival_chance=0),
+                "Prey Upon": Card(cost=[G], survival_chance=0)
             }
+
+
+cards = create_cards()
 
 
 def should_mulligan(hand):
     lands = 0
-    lands_needed = [0, 0, 1, 1, 2, 3, 3, 4, 4]
+    #               0  1  2  3  4  5  6  7
+    lands_needed = [0, 0, 1, 1, 2, 2, 2, 3]
     for card in hand:
         if len(card.managen) > 0:
             lands += 1
@@ -392,7 +433,7 @@ def should_mulligan(hand):
 def play_order(playable):
     playable = copy.copy(playable)
     for card in playable:
-        if card.name == "Recycling":
+        if card.name == "Recycling" or card.is_land:
             yield card
             playable.remove(card)
     random.shuffle(playable)
@@ -407,20 +448,24 @@ def main(argv=None):
         argv = sys.argv
     num_iterations = 500
     num_turns = 10
+    example = False
 
     if len(argv) < 2:
         print("Need to supply a deck file")
         return
     elif len(argv) > 2:
-        num_iterations = int(argv[2])
+        if argv[2] == 'example':
+            num_iterations = 1
+            example = True
+        else:
+            num_iterations = int(argv[2])
         if len(argv) > 3:
             num_turns = int(argv[3])
 
     library = []
-    commander = FillerCard(name='Filler')
+    commander = None
 
     with open(argv[1]) as deck_file:
-        cards = create_cards()
         for line in deck_file:
             if line.startswith('SB:'):
                 trash, quantity, *parts = line.split() # noqa
@@ -437,7 +482,7 @@ def main(argv=None):
             card.name = card_name
             for i in range(int(quantity)):
                 library.append(copy.deepcopy(card))
-
+    print(len(library))
     generated_mana = []
     for i in range(num_turns):
         generated_mana.append([0]*num_iterations)
@@ -456,12 +501,13 @@ def main(argv=None):
                 'played_cards': [],
                 'cards_drawn': [],
                 'cards_played': [],
-                'turn': 1
+                'turn': 1,
+                'example': example
               }
 
         draw_cards(env, 7)
         saved_cards = []
-        cards_to_draw = 7
+        cards_to_draw = 6
         while should_mulligan(env['hand']) and cards_to_draw > 0:
             average_mulligans += 1/num_iterations
             saved_cards += env['hand']
@@ -471,7 +517,8 @@ def main(argv=None):
             cards_to_draw -= 1
         env['library'] += saved_cards
         random.shuffle(env['library'])
-        env['hand'].append(copy.deepcopy(commander))
+        if commander:
+            env['hand'].append(copy.deepcopy(commander))
         # print(', '.join(['{}']*len(env['hand'])).format(*env['hand']))
 
         for turn in range(num_turns):
@@ -480,7 +527,8 @@ def main(argv=None):
             env['turn'] = turn + 1
             draw_multiplier = 1
             mana_generated = 0
-            # print('\n{}'.format(turn))
+            if example:
+                print('\n{}'.format(env['turn']))
             draw_cards(env, 1)
             env['mana_pool'] = []
             env['land_plays'] = 1
@@ -490,18 +538,18 @@ def main(argv=None):
                 env['hand'].remove(card)
 
             for card in env['played_cards']:
-                # print('{} is in Play'.format(card))
+                if example:
+                    print('{} is in Play'.format(card))
                 for effect in card.turn_effects:
                     effect(env)
-            # print(', '.join(['{}']*len(env['hand'])).format(*env['hand']))
+
+            if example:
+                print(', '.join(['{}']*len(env['hand'])).format(*env['hand']))
+
             for card in env['played_cards']:
                 card.generate_mana(env)
             mana_generated += len(env['mana_pool'])
 
-            # print()
-            # for card in env['hand']:
-            #     if card.name != 'Filler':
-            #         print('{} is in hand'.format(card))
             playable = ['t']
             while len(playable) > 0:
                 playable = []
@@ -552,21 +600,30 @@ def main(argv=None):
     print('Max: {:.2f}'.format(max_mana))
     print('\n{:.2f} mean cards drawn'.format(len(cards_drawn)/num_iterations))
     print('{:.2f} mulligans per game\n'.format(average_mulligans))
-    card_stats = defaultdict(lambda : [0, 0, 0, 0])
+    card_stats = defaultdict(lambda: [0, 0, 0, 0])
     print(len(cards_drawn))
     for card, turn in cards_drawn:
         card_stats[card][0] += turn
         card_stats[card][2] += 1
+    spells_cast = 0
     for card, turn in cards_played:
         card_stats[card][1] += turn
         card_stats[card][3] += 1
-    for card, val in sorted(card_stats.items(), key=lambda x: x[1][2]):
+        card_obj = cards.get(card, FillerCard(name='Filler'))
+        if not card_obj.is_land:
+            spells_cast += 1
+    for card, val in sorted(card_stats.items(), key=lambda x: x[1][2] - x[1][3]):
         if len(val) != 4:
             print(val)
         turn_drawn = float("inf") if val[2] == 0 else val[0]/val[2]
         turn_played = float("inf") if val[3] == 0 else val[1]/val[3]
-        print('{} {} was drawn {:2.2f} and played {:2.2f} times per game. On average drawn turn {:3.0f} and played {:3.0f}, difference {:3.0f}'.format(card,
-               ' '*(30 - len(card)), val[2]/num_iterations, val[3]/num_iterations, turn_drawn, turn_played, turn_played - turn_drawn))
+        play_to_draw = float("inf") if val[2] == 0 else val[3]/val[2]*100
+        percent_played = min(100, 100*val[3]/num_iterations)
+        percent_drawn = min(100, 100*val[2]/num_iterations)
+        print('{} {} was drawn {:3.0f}% and played {:3.0f}% of games with play/draw ratio {:3.0f}%. On average {:1.0f} turns between drawing and playing'.format(card, # noqa
+               ' '*(30 - len(card)), percent_drawn, percent_played, play_to_draw,
+               turn_played - turn_drawn))
+    print('Total cards played: {:2.2f}'.format(spells_cast/num_iterations))
 
 
 if __name__ == "__main__":
