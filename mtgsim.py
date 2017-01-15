@@ -56,7 +56,7 @@ class Card:
             return env['land_plays'] > 0
         else:
             remaining_mana = copy.deepcopy(env['mana_pool'])
-            random.shuffle(remaining_mana)
+            remaining_mana.sort(key=mana_ordering)
             payable = True
             for cost in self.cost:
                 to_remove = None
@@ -77,7 +77,6 @@ class Card:
             if self.is_land:
                 env['land_plays'] -= 1
             else:
-                random.shuffle(env['mana_pool'])
                 env['mana_pool'].sort(key=mana_ordering)
                 payed = 0
                 for cost in self.cost:
@@ -93,7 +92,7 @@ class Card:
         # print("Playing {}, free: {}".format(self.name, free))
         for effect in self.play_effects:
             effect(env)
-        return env['mana_pool']
+        env['cards_played'].append((self.name, env['turn']))
 
     def generate_mana(self, env):
         if self.delay > 0:
@@ -138,9 +137,10 @@ def draw_land_if_top(env):
 
 
 def draw_cards(env, n):
-    env['hand'] += env['library'][:n]
+    to_draw = env['library'][:n]
+    env['hand'] += to_draw
     env['library'] = env['library'][n:]
-    env['cards_drawn'] += n*draw_multiplier
+    env['cards_drawn'] += [(card.name, env['turn']) for card in to_draw]
 
 
 draw_multiplier = 1
@@ -380,7 +380,7 @@ def create_cards():
 
 def should_mulligan(hand):
     lands = 0
-    lands_needed = [0, 0, 1, 1, 2, 2, 3, 3, 4]
+    lands_needed = [0, 0, 1, 1, 2, 3, 3, 4, 4]
     for card in hand:
         if len(card.managen) > 0:
             lands += 1
@@ -395,9 +395,11 @@ def play_order(playable):
         if card.name == "Recycling":
             yield card
             playable.remove(card)
-    # random.shuffle(playable)
-    for card in sorted(playable, key=lambda x: len(x.cost)):
+    random.shuffle(playable)
+    for card in playable:
         yield card
+    # for card in sorted(playable, key=lambda x: len(x.cost)):
+    #     yield card
 
 
 def main(argv=None):
@@ -440,9 +442,8 @@ def main(argv=None):
     for i in range(num_turns):
         generated_mana.append([0]*num_iterations)
     excess_mana = [0.0]*num_turns
-    cards_drawn = list(itertools.repeat(0, num_iterations))
-    card_played = defaultdict(int)
-    turn_played = defaultdict(list)
+    cards_drawn = []
+    cards_played = []
     average_mulligans = 0
     max_mana = 0
     for iteration in range(num_iterations):
@@ -453,7 +454,9 @@ def main(argv=None):
                 'mana_pool': [],
                 'land_plays': 1,
                 'played_cards': [],
-                'cards_drawn': 0
+                'cards_drawn': [],
+                'cards_played': [],
+                'turn': 1
               }
 
         draw_cards(env, 7)
@@ -463,7 +466,7 @@ def main(argv=None):
             average_mulligans += 1/num_iterations
             saved_cards += env['hand']
             env['hand'] = []
-            env['cards_drawn'] = 0
+            env['cards_drawn'] = []
             draw_cards(env, cards_to_draw)
             cards_to_draw -= 1
         env['library'] += saved_cards
@@ -474,6 +477,7 @@ def main(argv=None):
         for turn in range(num_turns):
             if len(env['library']) == 0:
                 break
+            env['turn'] = turn + 1
             draw_multiplier = 1
             mana_generated = 0
             # print('\n{}'.format(turn))
@@ -484,7 +488,7 @@ def main(argv=None):
             to_remove = [card for card in env['hand'] if card.name == 'Draw Spell']
             for card in to_remove:
                 env['hand'].remove(card)
-            
+
             for card in env['played_cards']:
                 # print('{} is in Play'.format(card))
                 for effect in card.turn_effects:
@@ -509,8 +513,6 @@ def main(argv=None):
                     if card.can_play(env) and card in env['hand']:
                         try:
                             card.play(env)
-                            card_played[card.name] += 1/num_iterations
-                            turn_played[card.name].append(turn)
                         except ValueError:
                             pass
                         cache_mana = len(env['mana_pool'])
@@ -535,7 +537,8 @@ def main(argv=None):
                     card.cost += [1, 1]
                     env['hand'].append(card)
 
-        cards_drawn[iteration] = env['cards_drawn']
+        cards_drawn += env['cards_drawn']
+        cards_played += env['cards_played']
     for i in range(len(generated_mana)):
         try:
             while True:
@@ -547,12 +550,23 @@ def main(argv=None):
         print('Turn {}: {:.2f} median, {:.2f} mean, and {:.2f} stddev with {:.2f} mean excess'.format(i+1,
               statistics.median(mana), statistics.mean(mana), statistics.pstdev(mana), excess_mana[i]))
     print('Max: {:.2f}'.format(max_mana))
-    print('\n{:.2f} median cards drawn, {:.2f} mean, and {:.2f} stddev'.format(statistics.median(cards_drawn),
-          statistics.mean(cards_drawn), statistics.pstdev(cards_drawn)))
+    print('\n{:.2f} mean cards drawn'.format(len(cards_drawn)/num_iterations))
     print('{:.2f} mulligans per game\n'.format(average_mulligans))
-    for card, val in sorted(card_played.items(), key=lambda x: x[1]):
-        print('{} was played {} {:.2f} times per game. On median turn {:.0f}'.format(card,
-              ' '*(40-len(card)), val, statistics.median(turn_played[card])+1))
+    card_stats = defaultdict(lambda : [0, 0, 0, 0])
+    print(len(cards_drawn))
+    for card, turn in cards_drawn:
+        card_stats[card][0] += turn
+        card_stats[card][2] += 1
+    for card, turn in cards_played:
+        card_stats[card][1] += turn
+        card_stats[card][3] += 1
+    for card, val in sorted(card_stats.items(), key=lambda x: x[1][2]):
+        if len(val) != 4:
+            print(val)
+        turn_drawn = float("inf") if val[2] == 0 else val[0]/val[2]
+        turn_played = float("inf") if val[3] == 0 else val[1]/val[3]
+        print('{} {} was drawn {:2.2f} and played {:2.2f} times per game. On average drawn turn {:3.0f} and played {:3.0f}, difference {:3.0f}'.format(card,
+               ' '*(30 - len(card)), val[2]/num_iterations, val[3]/num_iterations, turn_drawn, turn_played, turn_played - turn_drawn))
 
 
 if __name__ == "__main__":
