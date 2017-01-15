@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import copy
-import itertools
 import random
 import statistics
 import sys
@@ -239,6 +238,7 @@ def kill_card(name):
 
 
 def alhammarret_effect(env):
+    global draw_multiplier
     draw_multiplier = 2
 
 
@@ -331,9 +331,8 @@ def create_cards():
                                         mana_effects=[double_gen]),
                 'Caged Sun': Card(cost=[1, 1, 1, 1, 1, 1], survival_chance=0.8,
                                   mana_effects=[increase_from_forests]),
-                'Exploration': Card(cost=[1, G], survival_chance=0,
-                                    play_effects=[draw_cards_effect(1),
-                                                  increase_land_plays(1)]),
+                'Explore': Card(cost=[1, G], survival_chance=0,
+                                play_effects=[draw_cards_effect(1), increase_land_plays(1)]),
                 'Elemental Bond': Card(cost=[1, 1, G], turn_effects=[draw_cards_effect(1)],
                                        survival_chance=0.9),
                 'Recycling': Card(cost=[1, 1, 1, 1, G, G], survival_chance=0,
@@ -421,7 +420,7 @@ cards = create_cards()
 def should_mulligan(hand):
     lands = 0
     #               0  1  2  3  4  5  6  7
-    lands_needed = [0, 0, 1, 1, 2, 2, 2, 3]
+    lands_needed = [0, 0, 1, 2, 2, 3, 3, 4]
     for card in hand:
         if len(card.managen) > 0:
             lands += 1
@@ -444,6 +443,7 @@ def play_order(playable):
 
 
 def main(argv=None):
+    global draw_multiplier, cards
     if not argv:
         argv = sys.argv
     num_iterations = 500
@@ -468,7 +468,7 @@ def main(argv=None):
     with open(argv[1]) as deck_file:
         for line in deck_file:
             if line.startswith('SB:'):
-                trash, quantity, *parts = line.split() # noqa
+                trash, quantity, *parts = line.split()
                 card_name = ' '.join(parts)
                 commander = cards.get(card_name, FillerCard(name='Filler'))
                 commander.is_commander = True
@@ -623,7 +623,7 @@ def main(argv=None):
         print('{} {} was drawn {:3.0f}% and played {:3.0f}% of games with play/draw ratio {:3.0f}%. On average {:1.0f} turns between drawing and playing'.format(card, # noqa
                ' '*(30 - len(card)), percent_drawn, percent_played, play_to_draw,
                turn_played - turn_drawn))
-    print('Total cards played: {:2.2f}'.format(spells_cast/num_iterations))
+    print('Average Spells Cast: {:2.2f}'.format(spells_cast/num_iterations))
 
 
 if __name__ == "__main__":
