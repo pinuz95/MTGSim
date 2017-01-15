@@ -148,7 +148,7 @@ draw_multiplier = 1
 
 def draw_cards_effect(n):
     def fun(env):
-        draw_cards(env, n*draw_multiplier)
+        draw_cards(env, n * draw_multiplier)
     return fun
 
 
@@ -164,7 +164,7 @@ def add_draw_spell(cost, repeatable=False):
                and len(card.play_effects) == 2:
                     return
 
-        draw_spell = Card(name='Draw Spell', cost=[1]*cost, survival_chance=0,
+        draw_spell = Card(name='Draw Spell', cost=[1] * cost, survival_chance=0,
                           play_effects=[draw_cards_effect(1)])
         if repeatable:
             draw_spell.play_effects.append(fun)
@@ -264,15 +264,15 @@ def search_land(env):
 
 
 def create_cards():
-    W = 'W'
-    U = 'U'
-    B = 'B'
-    R = 'R'
-    G = 'G'
-    C = 'C'
-    Any = ['W', 'U', 'B', 'R', 'G']
+    W = 'W' # noqa
+    U = 'U' # noqa
+    B = 'B' # noqa
+    R = 'R' # noqa
+    G = 'G' # noqa
+    C = 'C' # noqa
+    Any = ['W', 'U', 'B', 'R', 'G'] # noqa
     return {
-                'Mana Crypt': Card(name="Mana Crypt", managen=[C, C],
+                'Mana Crypt': Card(name="Mana Crypt", managen=[C, C], # noqa
                                    survival_chance=0.85),
                 'Plains': Card(name='Plains', managen=[W], is_land=True),
                 'Island': Card(name='Island', managen=[U], is_land=True),
@@ -302,17 +302,17 @@ def create_cards():
                 'Vorinclex, Voice of Hunger': Card(cost=[1, 1, 1, 1, 1, 1, G, G],
                                                    survival_chance=0.5,
                                                    mana_effects=[double_land]),
-                'Llanowar Elves':  Card(cost=[G], managen=[G], delay=1, survival_chance=0.8),
-                'Fyndhorn Elves':  Card(cost=[G], managen=[G], delay=1, survival_chance=0.8),
-                'Elvish Mystic':  Card(cost=[G], managen=[G], delay=1, survival_chance=0.8),
-                'Boreal Druid':  Card(cost=[G], managen=[C], delay=1, survival_chance=0.8),
+                'Llanowar Elves': Card(cost=[G], managen=[G], delay=1, survival_chance=0.8),
+                'Fyndhorn Elves': Card(cost=[G], managen=[G], delay=1, survival_chance=0.8),
+                'Elvish Mystic': Card(cost=[G], managen=[G], delay=1, survival_chance=0.8),
+                'Boreal Druid': Card(cost=[G], managen=[C], delay=1, survival_chance=0.8),
                 'Nissa, Worldwaker': Card(cost=[1, 1, 1, G, G],
-                                          turn_effects=[untap_forest]*4,
+                                          turn_effects=[untap_forest] * 4,
                                           survival_chance=0.67),
                 "Diviner's Wand": Card(cost=[1, 1, 1, 1, 1, 1],
                                        turn_effects=[add_draw_spell(4, repeatable=True)],
                                        survival_chance=0.85),
-                "Mind's Eye": Card(cost=[1, 1, 1, 1, 1], turn_effects=[add_draw_spell(1)]*3,
+                "Mind's Eye": Card(cost=[1, 1, 1, 1, 1], turn_effects=[add_draw_spell(1)] * 3,
                                    survival_chance=0.85),
                 "Mikokoro, Center of the Sea": Card(turn_effects=[add_draw_spell(3)],
                                                     managen=[C], is_land=True),
@@ -371,13 +371,13 @@ def create_cards():
                                            play_effects=[draw_cards_effect(1)]),
                 # Filler Cards
                 "Concordant Crossroads": Card(cost=[G], survival_chance=0),
-                "Akroma's Memorial": Card(cost=[1]*7, survival_chance=0),
+                "Akroma's Memorial": Card(cost=[1] * 7, survival_chance=0),
                 "Abundance": Card(cost=[1, 1, G, G], survival_chance=0),
-                "Avenger of Zendikar": Card(cost=[1]*5 + [G, G], survival_chance=0),
-                "Hydra Broodmaster": Card(cost=[1]*4 + [G, G], survival_chance=0),
+                "Avenger of Zendikar": Card(cost=[1] * 5 + [G, G], survival_chance=0),
+                "Hydra Broodmaster": Card(cost=[1] * 4 + [G, G], survival_chance=0),
                 "Undergrowth Champion": Card(cost=[1, G, G], survival_chance=0),
                 "Retreat to Kazandu": Card(cost=[1, 1, G], survival_chance=0),
-                "Craterhoof Behemoth": Card(cost=[1]*5 + [G]*3, survival_chance=0),
+                "Craterhoof Behemoth": Card(cost=[1] * 5 + [G] * 3, survival_chance=0),
                 "Spidersilk Armor": Card(cost=[1, 1, G], survival_chance=0),
                 "Beacon of Creation": Card(cost=[1, 1, 1, G], survival_chance=0),
                 "Rampaging Baloths": Card(cost=[1, 1, 1, 1, G, G], survival_chance=0),
@@ -485,8 +485,8 @@ def main(argv=None):
     print(len(library))
     generated_mana = []
     for i in range(num_turns):
-        generated_mana.append([0]*num_iterations)
-    excess_mana = [0.0]*num_turns
+        generated_mana.append([0] * num_iterations)
+    excess_mana = [0.0] * num_turns
     cards_drawn = []
     cards_played = []
     average_mulligans = 0
@@ -494,7 +494,7 @@ def main(argv=None):
     for iteration in range(num_iterations):
         random.shuffle(library)
         env = {
-                'library': copy.deepcopy(library),
+                'library': copy.deepcopy(library), # noqa
                 'hand': [],
                 'mana_pool': [],
                 'land_plays': 1,
@@ -509,7 +509,7 @@ def main(argv=None):
         saved_cards = []
         cards_to_draw = 6
         while should_mulligan(env['hand']) and cards_to_draw > 0:
-            average_mulligans += 1/num_iterations
+            average_mulligans += 1 / num_iterations
             saved_cards += env['hand']
             env['hand'] = []
             env['cards_drawn'] = []
@@ -544,7 +544,7 @@ def main(argv=None):
                     effect(env)
 
             if example:
-                print(', '.join(['{}']*len(env['hand'])).format(*env['hand']))
+                print(', '.join(['{}'] * len(env['hand'])).format(*env['hand']))
 
             for card in env['played_cards']:
                 card.generate_mana(env)
@@ -569,7 +569,7 @@ def main(argv=None):
                         env['played_cards'].append(card)
                         env['hand'].remove(card)
 
-            excess_mana[turn] += len(env['mana_pool'])/num_iterations
+            excess_mana[turn] += len(env['mana_pool']) / num_iterations
             generated_mana[turn][iteration] = mana_generated
             max_mana = max(max_mana, mana_generated)
 
@@ -595,10 +595,10 @@ def main(argv=None):
             pass
 
     for i, mana in enumerate(generated_mana):
-        print('Turn {}: {:.2f} median, {:.2f} mean, and {:.2f} stddev with {:.2f} mean excess'.format(i+1,
+        print('Turn {}: {:.2f} median, {:.2f} mean, and {:.2f} stddev with {:.2f} mean excess'.format(i + 1,
               statistics.median(mana), statistics.mean(mana), statistics.pstdev(mana), excess_mana[i]))
     print('Max: {:.2f}'.format(max_mana))
-    print('\n{:.2f} mean cards drawn'.format(len(cards_drawn)/num_iterations))
+    print('\n{:.2f} mean cards drawn'.format(len(cards_drawn) / num_iterations))
     print('{:.2f} mulligans per game\n'.format(average_mulligans))
     card_stats = defaultdict(lambda: [0, 0, 0, 0])
     print(len(cards_drawn))
@@ -615,15 +615,15 @@ def main(argv=None):
     for card, val in sorted(card_stats.items(), key=lambda x: x[1][2] - x[1][3]):
         if len(val) != 4:
             print(val)
-        turn_drawn = float("inf") if val[2] == 0 else val[0]/val[2]
-        turn_played = float("inf") if val[3] == 0 else val[1]/val[3]
-        play_to_draw = float("inf") if val[2] == 0 else val[3]/val[2]*100
-        percent_played = min(100, 100*val[3]/num_iterations)
-        percent_drawn = min(100, 100*val[2]/num_iterations)
+        turn_drawn = float("inf") if val[2] == 0 else val[0] / val[2]
+        turn_played = float("inf") if val[3] == 0 else val[1] / val[3]
+        play_to_draw = float("inf") if val[2] == 0 else val[3] / val[2] * 100
+        percent_played = min(100, 100 * val[3] / num_iterations)
+        percent_drawn = min(100, 100 * val[2] / num_iterations)
         print('{} {} was drawn {:3.0f}% and played {:3.0f}% of games with play/draw ratio {:3.0f}%. On average {:1.0f} turns between drawing and playing'.format(card, # noqa
-               ' '*(30 - len(card)), percent_drawn, percent_played, play_to_draw,
+               ' ' * (30 - len(card)), percent_drawn, percent_played, play_to_draw,
                turn_played - turn_drawn))
-    print('Average Spells Cast: {:2.2f}'.format(spells_cast/num_iterations))
+    print('Average Spells Cast: {:2.2f}'.format(spells_cast / num_iterations))
 
 
 if __name__ == "__main__":
