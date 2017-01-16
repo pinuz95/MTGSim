@@ -1,19 +1,30 @@
 #!/usr/bin/env python3
-
 import copy
+import functools
 import random
 import statistics
 import sys
+import traceback
 
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 
+@functools.lru_cache(maxsize=64)
 def mana_ordering(m):
-    mana_order = {1: '0', 'C': 1, 'W': 2, 'U': 2, 'B': 2, 'G': 2, 'R': 2}
-    if isinstance(m, list):
-        return 3
-    else:
+    mana_order = {1: 0, 'C': 1, 'W': 2, 'U': 3, 'B': 4, 'G': 5, 'R': 6}
+    try:
         return mana_order[m]
+    except:
+        return len(m) + 5
+
+
+def order_mana(m):
+    mana_pool = Counter(m)
+    result = []
+    for key, val in sorted(mana_pool.items(),
+                           key=lambda x: (mana_ordering(x[0]), -x[1])):
+        result += [key] * val
+    return result
 
 
 def can_pay(mana, cost):
@@ -21,13 +32,13 @@ def can_pay(mana, cost):
         return True
     if mana == cost:
         return True
-    if isinstance(mana, list):
+    if isinstance(mana, tuple):
         if cost in mana:
             return True
-    if isinstance(cost, list):
+    if isinstance(cost, tuple):
         if mana in cost:
             return True
-        if isinstance(mana, list):
+        if isinstance(mana, tuple):
             for nmana in mana:
                 for ncost in cost:
                     if can_pay(nmana, ncost):
@@ -36,7 +47,7 @@ def can_pay(mana, cost):
 
 
 class Card:
-    def __init__(self, name="Blank Name", cost=[], managen=[], delay=0,
+    def __init__(self, name="Blank Name", cost=[], managen=(), delay=0,
                  mana_effects=[], is_land=False, survival_chance=1.0,
                  turn_effects=[], play_effects=[]):
         self.name = name
@@ -54,8 +65,7 @@ class Card:
         if self.is_land:
             return env['land_plays'] > 0
         else:
-            remaining_mana = copy.deepcopy(env['mana_pool'])
-            remaining_mana.sort(key=mana_ordering)
+            remaining_mana = order_mana(env['mana_pool'])
             payable = True
             for cost in self.cost:
                 to_remove = None
@@ -70,8 +80,6 @@ class Card:
             return payable
 
     def play(self, env, free=False):
-        if not self.can_play(env):
-            raise ValueError("You can't play this card")
         if not free:
             if self.is_land:
                 env['land_plays'] -= 1
@@ -104,6 +112,7 @@ class Card:
                 effect(self, mana_generated)
         # print('{} generated {}'.format(self.name, mana_generated))
         env['mana_pool'] += mana_generated
+        env['mana_generated'] += len(mana_generated)
         return mana_generated
 
     def survives_turn(self, env):
@@ -141,6 +150,8 @@ def draw_cards(env, n):
     env['hand'] += to_draw
     env['library'] = env['library'][n:]
     env['cards_drawn'] += [(card.name, env['turn']) for card in to_draw]
+    if env['example']:
+        print('Drawing', ', '.join(['{}'] * len(to_draw)).format(*to_draw))
 
 
 draw_multiplier = 1
@@ -157,7 +168,7 @@ def double_land(card, mana):
         mana.append(random.choice(mana))
 
 
-def add_draw_spell(cost, repeatable=False):
+def add_draw_spell(cost, amount=1, repeatable=False):
     def fun(env):
         for card in env['hand']:
             if card.name == 'Draw Spell' and len(card.cost) == cost \
@@ -165,7 +176,7 @@ def add_draw_spell(cost, repeatable=False):
                     return
 
         draw_spell = Card(name='Draw Spell', cost=[1] * cost, survival_chance=0,
-                          play_effects=[draw_cards_effect(1)])
+                          play_effects=[draw_cards_effect(amount)])
         if repeatable:
             draw_spell.play_effects.append(fun)
         env['hand'].append(draw_spell)
@@ -178,7 +189,8 @@ def double_gen(card, mana):
 
 def recycle_effect(env):
     for card in env['hand']:
-        card.play_effects.append(draw_cards_effect(1))
+        if card.name != "Recycling":
+            card.play_effects.append(draw_cards_effect(1))
     for card in env['library']:
         card.play_effects.append(draw_cards_effect(1))
 
@@ -195,16 +207,17 @@ def landfall_draw(env):
 def add_mana(mana):
     def fun(env):
         env['mana_pool'].append(mana)
+        env['mana_generated'] += len(mana)
     return fun
 
 
 def landfall_mana(env):
     for card in env['hand']:
         if card.is_land:
-            card.play_effects.append(add_mana(['W', 'U', 'B', 'R', 'G']))
+            card.play_effects.append(add_mana(('W', 'U', 'B', 'R', 'G')))
     for card in env['library']:
         if card.is_land:
-            card.play_effects.append(add_mana(['W', 'U', 'B', 'R', 'G']))
+            card.play_effects.append(add_mana(('W', 'U', 'B', 'R', 'G')))
 
 
 def untap_forest(env):
@@ -221,11 +234,16 @@ def untap_all_forests(env):
 
 
 def bounce_forest(env):
-    for card in env['played_cards']:
-        if card.name == 'Forest':
-            env['played_cards'].remove(card)
-            env['hand'].append(card)
-            break
+    lands = 0
+    for card in env['hand']:
+        if card.is_land:
+            lands += 1
+    if lands < 3:
+        for card in env['played_cards']:
+            if card.name == 'Forest':
+                env['played_cards'].remove(card)
+                env['hand'].append(card)
+                break
 
 
 def kill_card(name):
@@ -243,7 +261,10 @@ def alhammarret_effect(env):
 
 
 def genesis_wave_effect(env):
-    quantity = 5 + len(env['mana_pool'])
+    quantity = min(5 + len(env['mana_pool']), len(env['library']))
+    env['mana_pool'] = env['mana_pool'][quantity - 5:]
+    if env['example']:
+        print("Genesis Wave for {} out of {}".format(quantity, len(env['library'])))
     for i in range(quantity):
         card = None
         try:
@@ -255,11 +276,25 @@ def genesis_wave_effect(env):
         card.generate_mana(env)
 
 
-def search_land(env):
+def search_basic_land(env):
+    # basic_lands = ["Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes"]
+    basic_lands = ["Plains"]
     for card in env['library']:
-        if card.is_land:
+        if card.name in basic_lands:
             env['hand'].append(card)
             env['library'].remove(card)
+            random.shuffle(env['library'])
+            break
+
+
+def basic_land_to_battlefield(env):
+    # basic_lands = ["Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes"]
+    basic_lands = ["Plains"]
+    for card in env['library']:
+        if card.name in basic_lands:
+            card.play(env, free=True)
+            env['library'].remove(card)
+            random.shuffle(env['library'])
             break
 
 
@@ -270,42 +305,48 @@ def create_cards():
     R = 'R' # noqa
     G = 'G' # noqa
     C = 'C' # noqa
-    Any = ['W', 'U', 'B', 'R', 'G'] # noqa
+    Any = ('W', 'U', 'B', 'R', 'G') # noqa
     return {
-                'Mana Crypt': Card(name="Mana Crypt", managen=[C, C], # noqa
+                'Mana Crypt': Card(name="Mana Crypt", managen=(C, C), # noqa
                                    survival_chance=0.85),
-                'Plains': Card(name='Plains', managen=[W], is_land=True),
-                'Island': Card(name='Island', managen=[U], is_land=True),
-                'Swamp': Card(name='Swamp', managen=[B], is_land=True),
-                'Mountain': Card(name='Mountain', managen=[R], is_land=True),
-                'Forest': Card(name='Forest', managen=[G], is_land=True),
-                'Birds of Paradise': Card(cost=[G], managen=[Any], delay=1,
+                'Plains': Card(name='Plains', managen=(W), is_land=True),
+                'Island': Card(name='Island', managen=(U), is_land=True),
+                'Swamp': Card(name='Swamp', managen=(B), is_land=True),
+                'Mountain': Card(name='Mountain', managen=(R), is_land=True),
+                'Forest': Card(name='Forest', managen=(G), is_land=True),
+                'Birds of Paradise': Card(cost=[G], managen=(Any), delay=1,
                                           survival_chance=0.85),
                 'Azusa, Lost but Seeking': Card(cost=[1, 1, G], survival_chance=0.75,
-                                                turn_effects=[increase_land_plays(2)]),
+                                                turn_effects=[increase_land_plays(2)],
+                                                play_effects=[increase_land_plays(2)]),
                 'Exploration': Card(cost=[1, G], survival_chance=0.95,
-                                    turn_effects=[increase_land_plays(1)]),
+                                    turn_effects=[increase_land_plays(1)],
+                                    play_effects=[increase_land_plays(1)]),
                 'Ghirapur Orrery': Card(cost=[1, 1, 1, 1], survival_chance=0.90,
-                                        turn_effects=[increase_land_plays(1)]),
-                'Budoka Gardener': Card(cost=[G], survival_chance=0.85,
+                                        turn_effects=[increase_land_plays(1)],
+                                        play_effects=[increase_land_plays(1)]),
+                'Budoka Gardener': Card(cost=[1, G], survival_chance=0.85,
                                         turn_effects=[increase_land_plays(1)]),
                 'Vernal Bloom': Card(cost=[G, 1, 1, 1], survival_chance=0.90,
                                      mana_effects=[increase_from_forests]),
                 'Oracle of Mul Daya': Card(cost=[G, 1, 1, 1], survival_chance=0.75,
                                            turn_effects=[draw_land_if_top,
+                                                         increase_land_plays(1)],
+                                           play_effects=[draw_land_if_top,
                                                          increase_land_plays(1)]),
                 'Rites of Flourishing': Card(cost=[G, 1, 1], survival_chance=0.95,
                                              turn_effects=[draw_cards_effect(1),
-                                                           increase_land_plays(1)]),
-                'Joraga Treespeaker': Card(cost=[G, G, 1], managen=[G, G],
-                                           survival_chance=0.75, delay=1),
+                                                           increase_land_plays(1)],
+                                             play_effects=[increase_land_plays(1)]),
+                'Joraga Treespeaker': Card(cost=[G], managen=(G, G),
+                                           survival_chance=0.75, delay=2),
                 'Vorinclex, Voice of Hunger': Card(cost=[1, 1, 1, 1, 1, 1, G, G],
                                                    survival_chance=0.5,
                                                    mana_effects=[double_land]),
-                'Llanowar Elves': Card(cost=[G], managen=[G], delay=1, survival_chance=0.8),
-                'Fyndhorn Elves': Card(cost=[G], managen=[G], delay=1, survival_chance=0.8),
-                'Elvish Mystic': Card(cost=[G], managen=[G], delay=1, survival_chance=0.8),
-                'Boreal Druid': Card(cost=[G], managen=[C], delay=1, survival_chance=0.8),
+                'Llanowar Elves': Card(cost=[G], managen=(G), delay=1, survival_chance=0.8),
+                'Fyndhorn Elves': Card(cost=[G], managen=(G), delay=1, survival_chance=0.8),
+                'Elvish Mystic': Card(cost=[G], managen=(G), delay=1, survival_chance=0.8),
+                'Boreal Druid': Card(cost=[G], managen=(C), delay=1, survival_chance=0.8),
                 'Nissa, Worldwaker': Card(cost=[1, 1, 1, G, G],
                                           turn_effects=[untap_forest] * 4,
                                           survival_chance=0.67),
@@ -315,11 +356,13 @@ def create_cards():
                 "Mind's Eye": Card(cost=[1, 1, 1, 1, 1], turn_effects=[add_draw_spell(1)] * 3,
                                    survival_chance=0.85),
                 "Mikokoro, Center of the Sea": Card(turn_effects=[add_draw_spell(3)],
-                                                    managen=[C], is_land=True),
+                                                    managen=(C), is_land=True),
                 "Gaea's Touch": Card(cost=[G, G], turn_effects=[increase_land_plays(1)],
-                                     survival_chance=0.95),
+                                     survival_chance=0.95,
+                                     play_effects=[increase_land_plays(1)]),
                 'Temple Bell': Card(cost=[1, 1, 1], turn_effects=[draw_cards_effect(1)],
-                                    survival_chance=0.9),
+                                    survival_chance=0.9,
+                                    play_effects=[draw_cards_effect(1)]),
                 'Howling Mine': Card(cost=[1, 1], turn_effects=[draw_cards_effect(1)],
                                      survival_chance=0.9),
                 'Font of Mythos': Card(cost=[1, 1, 1, 1], turn_effects=[draw_cards_effect(2)],
@@ -366,9 +409,42 @@ def create_cards():
                                      survival_chance=0),
                 "Renegade Map": Card(cost=[1],
                                      turn_effects=[kill_card('Renegade Map'),
-                                                   search_land]),
+                                                   search_basic_land]),
                 "Resourceful Return": Card(cost=[1, B], survival_chance=0,
                                            play_effects=[draw_cards_effect(1)]),
+                "Tower of Fortunes": Card(cost=[1, 1, 1, 1], survival_chance=-.9,
+                                          play_effects=[add_draw_spell(8, 4)],
+                                          turn_effects=[add_draw_spell(8, 4)]),
+                "Fancy Draw": Card(cost=[1, 1, U, U], survival_chance=0,
+                                   play_effects=[draw_cards_effect(2)]),
+                "Vision Skeins": Card(cost=[1, U], survival_chance=0,
+                                   play_effects=[draw_cards_effect(2)]),
+                "Simple Draw": Card(cost=[U], survival_chance=0,
+                                   play_effects=[draw_cards_effect(1)]),
+                "Battlefield Forge": Card(managen=((C, W, R),), is_land=True),
+                "Valakut, the Molten Pinnacle": Card(managen=(R), delay=1, is_land=True),
+                "Boros Cluestone": Card(cost=[1, 1, 1], managen=((W, R),), survival_chance=0.85),
+                "Boros Keyrune": Card(cost=[1, 1, 1], managen=((W, R),), survival_chance=0.85),
+                "Inspired Vantage": Card(managen=((W, R),), is_land=True),  # TODO Implement fast effect
+                "Sacred Foundry": Card(managen=((W, R),), is_land=True),
+                "Clifftop Retreat": Card(managen=((W, R),), is_land=True),  # TODO Implement check effect
+                "Land Tax": Card(cost=[W], turn_effects=[search_basic_land] * 2,
+                                 survival_chance=0.95),
+                "Command Tower": Card(managen=(Any,), is_land=True),
+                "Thran Dynamo": Card(cost=[1, 1, 1, 1], managen=(C, C, C), survival_chance=0.85),
+                "Coldsteel Heart": Card(cost=[1, 1], managen=((W, R),), delay=1),
+                "Tithe": Card(cost=[W], survival_chance=0,
+                              play_effects=[search_basic_land] * 2),  # TODO Make only search plains
+                "Darksteel Ingot": Card(cost=[1, 1, 1], managen=(Any)),
+                "Sol Ring": Card(cost=[1], managen=(C, C), survival_chance=0.8),
+                "Oath of Lieges": Card(cost=[1, W], turn_effects=[basic_land_to_battlefield]),
+                "Nykthos, Shrine to Nyx": Card(managen=(C), is_land=True),
+                "Worn Powerstone": Card(managen=(C, C), cost=[1, 1, 1], delay=1, survival_chance=0.9),
+                "Mind Stone": Card(cost=[1, 1], managen=(C), survival_chance=0.9),
+                "Hedron Archive": Card(cost=[1, 1, 1, 1], managen=(C, C), survival_chance=0.85),
+                "Chandra, Torch of Defiance": Card(cost=[1, 1, R, R], managen=(R, R), survival_chance=0.67),
+
+
                 # Filler Cards
                 "Concordant Crossroads": Card(cost=[G], survival_chance=0),
                 "Akroma's Memorial": Card(cost=[1] * 7, survival_chance=0),
@@ -410,36 +486,81 @@ def create_cards():
                 "Fourth Bridge Prowler": Card(cost=[B], survival_chance=0),
                 "Lifecrafter's Gift": Card(cost=[1, 1, 1, G], survival_chance=0),
                 "Winding Constrictor": Card(cost=[B, G], survival_chance=0),
-                "Prey Upon": Card(cost=[G], survival_chance=0)
+                "Prey Upon": Card(cost=[G], survival_chance=0),
+                "Primordial Hydra": Card(cost=[1, 1, 1, 1, G, G], survival_chance=0),
+                "Metallurgic Summonings": Card(cost=[1, 1, 1, U, U], survival_chance=0,
+                                               turn_effects=[lambda x: None] * 10),
+                "Gisela, Blade of Goldnight": Card(cost=[1, 1, 1, 1, W, W, R],
+                                                   turn_effects=[lambda x: None] * 10,
+                                                   survival_chance=0)
             }
 
 
 cards = create_cards()
 
 
+# Lands based
+# def should_mulligan(hand):
+#     lands = 0
+#     #                   0  1  2  3  4  5  6  7
+#     lands_needed =     [0, 0, 1, 1, 2, 2, 3, 3] # noqa
+#     overloaded_lands = [1, 2, 3, 4, 5, 5, 5, 5] # noqa
+#     # overloaded_lands = [8] * 8
+#     found = False
+#     for card in hand:
+#         if card.is_land:
+#             lands += 1
+#         if card.name == "Metallurgic Summonings":
+#             lands += 2 if not found else -1
+#         if card.name == "Recycling":
+#             return False
+#     return lands < lands_needed[len(hand)]
+#     # return lands < lands_needed[len(hand)] or lands >= overloaded_lands[len(hand)]
+
+
 def should_mulligan(hand):
+    mana = 0
     lands = 0
-    #               0  1  2  3  4  5  6  7
-    lands_needed = [0, 0, 1, 2, 2, 3, 3, 4]
+    mana_needed = [i - 2 for i in range(8)]
     for card in hand:
-        if len(card.managen) > 0:
+        if len(card.managen) > 0 and not card.is_land:
+            mana += len(card.managen)
+        if card.is_land:
             lands += 1
-        if card.name == "Recycling":
-            return False
-    return lands < lands_needed[len(hand)]
+    if lands >= 3:
+        mana += lands
+    return mana < mana_needed[len(hand)]
 
 
-def play_order(playable):
-    playable = copy.copy(playable)
-    for card in playable:
-        if card.name == "Recycling" or card.is_land:
-            yield card
-            playable.remove(card)
-    random.shuffle(playable)
-    for card in playable:
-        yield card
-    # for card in sorted(playable, key=lambda x: len(x.cost)):
-    #     yield card
+def should_play(env):
+    more_to_play = True
+    while more_to_play:
+        playable = [card for card in env['hand'] if card.can_play(env)]
+        if len(playable) == 0:
+            more_to_play = False
+        for card in playable:
+            if card.name == "Recycling" or len(card.mana_effects) > 0 or card.name == "Metallurgic Summonings":# or card.name == "Gisela, Blade of Goldnight": # noqa
+                yield card
+                playable.remove(card)
+        for card in playable:
+            if card.is_land:
+                yield card
+                break
+        else:
+            for card in playable:
+                if len(card.play_effects) > 0:
+                    yield card
+                    playable.remove(card)
+            # random.shuffle(playable)
+            for card in sorted(playable, key=lambda x: -len(x.managen)):
+                yield card
+
+
+def should_discard(env, num):
+    cards = sorted(env['hand'], key=lambda x: len(x.managen) +
+                                              len(x.turn_effects + x.play_effects + # noqa
+                                                  x.mana_effects))
+    return cards[:num]
 
 
 def main(argv=None):
@@ -492,7 +613,6 @@ def main(argv=None):
     average_mulligans = 0
     max_mana = 0
     for iteration in range(num_iterations):
-        random.shuffle(library)
         env = {
                 'library': copy.deepcopy(library), # noqa
                 'hand': [],
@@ -502,9 +622,11 @@ def main(argv=None):
                 'cards_drawn': [],
                 'cards_played': [],
                 'turn': 1,
-                'example': example
+                'example': example,
+                'mana_generated': 0
               }
 
+        random.shuffle(env['library'])
         draw_cards(env, 7)
         saved_cards = []
         cards_to_draw = 6
@@ -517,19 +639,18 @@ def main(argv=None):
             cards_to_draw -= 1
         env['library'] += saved_cards
         random.shuffle(env['library'])
+
         if commander:
             env['hand'].append(copy.deepcopy(commander))
-        # print(', '.join(['{}']*len(env['hand'])).format(*env['hand']))
 
         for turn in range(num_turns):
             if len(env['library']) == 0:
                 break
             env['turn'] = turn + 1
             draw_multiplier = 1
-            mana_generated = 0
+            env['mana_generated'] = 0
             if example:
                 print('\n{}'.format(env['turn']))
-            draw_cards(env, 1)
             env['mana_pool'] = []
             env['land_plays'] = 1
 
@@ -538,42 +659,43 @@ def main(argv=None):
                 env['hand'].remove(card)
 
             for card in env['played_cards']:
-                if example:
-                    print('{} is in Play'.format(card))
                 for effect in card.turn_effects:
                     effect(env)
 
+            draw_cards(env, 1)
+
             if example:
-                print(', '.join(['{}'] * len(env['hand'])).format(*env['hand']))
+                print('In Play: ', ', '.join(['{}'] * len(env['played_cards'])).format(*sorted(env['played_cards'],
+                                                                                               key=lambda x: x.name)))
+                print('Hand: ', ', '.join(['{}'] * len(env['hand'])).format(*sorted(env['hand'],
+                                                                                    key=lambda x: x.name)))
 
             for card in env['played_cards']:
                 card.generate_mana(env)
-            mana_generated += len(env['mana_pool'])
 
-            playable = ['t']
-            while len(playable) > 0:
-                playable = []
-                for card in env['hand']:
-                    if card.can_play(env):
-                        playable.append(card)
-                random.shuffle(playable)
-                for card in play_order(playable):
-                    if card.can_play(env) and card in env['hand']:
-                        try:
-                            card.play(env)
-                        except ValueError:
-                            pass
-                        cache_mana = len(env['mana_pool'])
-                        card.generate_mana(env)
-                        mana_generated += len(env['mana_pool']) - cache_mana
-                        env['played_cards'].append(card)
-                        env['hand'].remove(card)
+            for card in should_play(env):
+                if card not in env['hand'] or not card.can_play(env):
+                    continue
+                try:
+                    card.play(env)
+                except ValueError:
+                    traceback.print_exc()
+                    continue
+                card.generate_mana(env)
+                env['played_cards'].append(card)
+                env['hand'].remove(card)
 
             excess_mana[turn] += len(env['mana_pool']) / num_iterations
-            generated_mana[turn][iteration] = mana_generated
-            max_mana = max(max_mana, mana_generated)
+            generated_mana[turn][iteration] = env['mana_generated']
+            max_mana = max(max_mana, env['mana_generated'])
 
-            env['hand'] = env['hand'][:7]
+            hand_len = len(env['hand'])
+            if hand_len > 7:
+                for card in should_discard(env, hand_len - 7):
+                    try:
+                        env['hand'].remove(card)
+                    except ValueError:
+                        print("Couldn't find card to remove")
 
             dead_cards = []
             for card in env['played_cards']:
@@ -587,44 +709,42 @@ def main(argv=None):
 
         cards_drawn += env['cards_drawn']
         cards_played += env['cards_played']
-    for i in range(len(generated_mana)):
-        try:
-            while True:
-                generated_mana[i].remove(0)
-        except:
-            pass
 
-    for i, mana in enumerate(generated_mana):
-        print('Turn {}: {:.2f} median, {:.2f} mean, and {:.2f} stddev with {:.2f} mean excess'.format(i + 1,
-              statistics.median(mana), statistics.mean(mana), statistics.pstdev(mana), excess_mana[i]))
-    print('Max: {:.2f}'.format(max_mana))
-    print('\n{:.2f} mean cards drawn'.format(len(cards_drawn) / num_iterations))
-    print('{:.2f} mulligans per game\n'.format(average_mulligans))
     card_stats = defaultdict(lambda: [0, 0, 0, 0])
-    print(len(cards_drawn))
+    spells_cast = [0] * num_turns
+    total_spells_cast = 0
     for card, turn in cards_drawn:
         card_stats[card][0] += turn
         card_stats[card][2] += 1
-    spells_cast = 0
     for card, turn in cards_played:
         card_stats[card][1] += turn
         card_stats[card][3] += 1
         card_obj = cards.get(card, FillerCard(name='Filler'))
-        if not card_obj.is_land:
-            spells_cast += 1
-    for card, val in sorted(card_stats.items(), key=lambda x: x[1][2] - x[1][3]):
-        if len(val) != 4:
-            print(val)
-        turn_drawn = float("inf") if val[2] == 0 else val[0] / val[2]
-        turn_played = float("inf") if val[3] == 0 else val[1] / val[3]
-        play_to_draw = float("inf") if val[2] == 0 else val[3] / val[2] * 100
-        percent_played = min(100, 100 * val[3] / num_iterations)
-        percent_drawn = min(100, 100 * val[2] / num_iterations)
-        print('{} {} was drawn {:3.0f}% and played {:3.0f}% of games with play/draw ratio {:3.0f}%. On average {:1.0f} turns between drawing and playing'.format(card, # noqa
-               ' ' * (30 - len(card)), percent_drawn, percent_played, play_to_draw,
-               turn_played - turn_drawn))
-    print('Average Spells Cast: {:2.2f}'.format(spells_cast / num_iterations))
+        if not card_obj.is_land and card != "Draw Spell":
+            spells_cast[turn - 1] += 1
+            total_spells_cast += 1
+
+    for i, mana in enumerate(generated_mana):
+        print('Turn {:2.0f}: {:3.0f} median, {:3.2f} mean, and {:3.2f} stddev with {:3.2f} mean excess, and {:2.2f} spells cast'.format(i + 1, # noqa
+              statistics.median(mana), statistics.mean(mana), statistics.pstdev(mana), excess_mana[i],
+              spells_cast[i] / num_iterations))
+    print('Max: {:.2f}'.format(max_mana))
+    print('Average spells cast: {:2.2f}'.format(total_spells_cast / num_iterations))
+    print('\n{:.2f} mean cards drawn'.format(len(cards_drawn) / num_iterations))
+    print('{:.2f} mulligans per game\n'.format(average_mulligans))
+    if not example:
+        for card, val in sorted(card_stats.items(), key=lambda x: x[1][3] / max(x[1][2], 1)):
+            if len(val) != 4:
+                print(val)
+            turn_drawn = float("inf") if val[2] == 0 else val[0] / val[2]
+            turn_played = float("inf") if val[3] == 0 else val[1] / val[3]
+            play_to_draw = float("inf") if val[2] == 0 else val[3] / val[2] * 100
+            percent_played = min(100, 100 * val[3] / num_iterations)
+            percent_drawn = min(100, 100 * val[2] / num_iterations)
+            print('{} {} was drawn {:3.0f}% and played {:3.0f}% of games with play/draw ratio {:3.0f}%. On average {:1.0f} turns between drawing and playing'.format(card, # noqa
+                   ' ' * (30 - len(card)), percent_drawn, percent_played, play_to_draw,
+                   turn_played - turn_drawn))
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    main()
