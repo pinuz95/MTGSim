@@ -136,7 +136,7 @@ def increase_land_plays(n):
 
 def increase_from_forests(card, mana):
     if card.name == 'Forest':
-        mana += 'G'
+        mana += ('G',)
 
 
 def draw_land_if_top(env):
@@ -165,7 +165,7 @@ def draw_cards_effect(n):
 
 def double_land(card, mana):
     if card.is_land and len(card.managen) > 0:
-        mana.append(random.choice(mana))
+        mana += (random.choice(mana),)
 
 
 def add_draw_spell(cost, amount=1, repeatable=False):
@@ -307,14 +307,14 @@ def create_cards():
     C = 'C' # noqa
     Any = ('W', 'U', 'B', 'R', 'G') # noqa
     return {
-                'Mana Crypt': Card(name="Mana Crypt", managen=(C, C), # noqa
+                'Mana Crypt': Card(name="Mana Crypt", managen=(C, C,), # noqa
                                    survival_chance=0.85),
-                'Plains': Card(name='Plains', managen=(W), is_land=True),
-                'Island': Card(name='Island', managen=(U), is_land=True),
-                'Swamp': Card(name='Swamp', managen=(B), is_land=True),
-                'Mountain': Card(name='Mountain', managen=(R), is_land=True),
-                'Forest': Card(name='Forest', managen=(G), is_land=True),
-                'Birds of Paradise': Card(cost=[G], managen=(Any), delay=1,
+                'Plains': Card(name='Plains', managen=(W,), is_land=True),
+                'Island': Card(name='Island', managen=(U,), is_land=True),
+                'Swamp': Card(name='Swamp', managen=(B,), is_land=True),
+                'Mountain': Card(name='Mountain', managen=(R,), is_land=True),
+                'Forest': Card(name='Forest', managen=(G,), is_land=True),
+                'Birds of Paradise': Card(cost=[G], managen=(Any,), delay=1,
                                           survival_chance=0.85),
                 'Azusa, Lost but Seeking': Card(cost=[1, 1, G], survival_chance=0.75,
                                                 turn_effects=[increase_land_plays(2)],
@@ -338,15 +338,15 @@ def create_cards():
                                              turn_effects=[draw_cards_effect(1),
                                                            increase_land_plays(1)],
                                              play_effects=[increase_land_plays(1)]),
-                'Joraga Treespeaker': Card(cost=[G], managen=(G, G),
+                'Joraga Treespeaker': Card(cost=[G], managen=(G, G,),
                                            survival_chance=0.75, delay=2),
                 'Vorinclex, Voice of Hunger': Card(cost=[1, 1, 1, 1, 1, 1, G, G],
                                                    survival_chance=0.5,
                                                    mana_effects=[double_land]),
-                'Llanowar Elves': Card(cost=[G], managen=(G), delay=1, survival_chance=0.8),
-                'Fyndhorn Elves': Card(cost=[G], managen=(G), delay=1, survival_chance=0.8),
-                'Elvish Mystic': Card(cost=[G], managen=(G), delay=1, survival_chance=0.8),
-                'Boreal Druid': Card(cost=[G], managen=(C), delay=1, survival_chance=0.8),
+                'Llanowar Elves': Card(cost=[G], managen=(G,), delay=1, survival_chance=0.8),
+                'Fyndhorn Elves': Card(cost=[G], managen=(G,), delay=1, survival_chance=0.8),
+                'Elvish Mystic': Card(cost=[G], managen=(G,), delay=1, survival_chance=0.8),
+                'Boreal Druid': Card(cost=[G], managen=(C,), delay=1, survival_chance=0.8),
                 'Nissa, Worldwaker': Card(cost=[1, 1, 1, G, G],
                                           turn_effects=[untap_forest] * 4,
                                           survival_chance=0.67),
@@ -356,7 +356,7 @@ def create_cards():
                 "Mind's Eye": Card(cost=[1, 1, 1, 1, 1], turn_effects=[add_draw_spell(1)] * 3,
                                    survival_chance=0.85),
                 "Mikokoro, Center of the Sea": Card(turn_effects=[add_draw_spell(3)],
-                                                    managen=(C), is_land=True),
+                                                    managen=(C,), is_land=True),
                 "Gaea's Touch": Card(cost=[G, G], turn_effects=[increase_land_plays(1)],
                                      survival_chance=0.95,
                                      play_effects=[increase_land_plays(1)]),
@@ -421,29 +421,30 @@ def create_cards():
                                    play_effects=[draw_cards_effect(2)]),
                 "Simple Draw": Card(cost=[U], survival_chance=0,
                                    play_effects=[draw_cards_effect(1)]),
-                "Battlefield Forge": Card(managen=((C, W, R),), is_land=True),
-                "Valakut, the Molten Pinnacle": Card(managen=(R), delay=1, is_land=True),
-                "Boros Cluestone": Card(cost=[1, 1, 1], managen=((W, R),), survival_chance=0.85),
-                "Boros Keyrune": Card(cost=[1, 1, 1], managen=((W, R),), survival_chance=0.85),
-                "Inspired Vantage": Card(managen=((W, R),), is_land=True),  # TODO Implement fast effect
-                "Sacred Foundry": Card(managen=((W, R),), is_land=True),
-                "Clifftop Retreat": Card(managen=((W, R),), is_land=True),  # TODO Implement check effect
+                "Battlefield Forge": Card(managen=((C, W, R,),), is_land=True),
+                "Valakut, the Molten Pinnacle": Card(managen=(R,), delay=1, is_land=True),
+                "Boros Cluestone": Card(cost=[1, 1, 1], managen=((W, R,),), survival_chance=0.85),
+                "Boros Keyrune": Card(cost=[1, 1, 1], managen=((W, R,),), survival_chance=0.85),
+                "Inspired Vantage": Card(managen=((W, R,),), is_land=True),  # TODO Implement fast effect
+                "Sacred Foundry": Card(managen=((W, R,),), is_land=True),
+                "Clifftop Retreat": Card(managen=((W, R,),), is_land=True),  # TODO Implement check effect
                 "Land Tax": Card(cost=[W], turn_effects=[search_basic_land] * 2,
                                  survival_chance=0.95),
                 "Command Tower": Card(managen=(Any,), is_land=True),
-                "Thran Dynamo": Card(cost=[1, 1, 1, 1], managen=(C, C, C), survival_chance=0.85),
-                "Coldsteel Heart": Card(cost=[1, 1], managen=((W, R),), delay=1),
+                "Thran Dynamo": Card(cost=[1, 1, 1, 1], managen=(C, C, C,), survival_chance=0.85),
+                "Coldsteel Heart": Card(cost=[1, 1], managen=((W, R,),), delay=1),
                 "Tithe": Card(cost=[W], survival_chance=0,
                               play_effects=[search_basic_land] * 2),  # TODO Make only search plains
-                "Darksteel Ingot": Card(cost=[1, 1, 1], managen=(Any)),
-                "Sol Ring": Card(cost=[1], managen=(C, C), survival_chance=0.8),
+                "Darksteel Ingot": Card(cost=[1, 1, 1], managen=(Any,)),
+                "Sol Ring": Card(cost=[1], managen=(C, C,), survival_chance=0.8),
                 "Oath of Lieges": Card(cost=[1, W], turn_effects=[basic_land_to_battlefield]),
-                "Nykthos, Shrine to Nyx": Card(managen=(C), is_land=True),
-                "Worn Powerstone": Card(managen=(C, C), cost=[1, 1, 1], delay=1, survival_chance=0.9),
-                "Mind Stone": Card(cost=[1, 1], managen=(C), survival_chance=0.9),
-                "Hedron Archive": Card(cost=[1, 1, 1, 1], managen=(C, C), survival_chance=0.85),
-                "Chandra, Torch of Defiance": Card(cost=[1, 1, R, R], managen=(R, R), survival_chance=0.67),
-
+                "Nykthos, Shrine to Nyx": Card(managen=(C,), is_land=True),
+                "Worn Powerstone": Card(managen=(C, C,), cost=[1, 1, 1], delay=1, survival_chance=0.9),
+                "Mind Stone": Card(cost=[1, 1], managen=(C,), survival_chance=0.9),
+                "Hedron Archive": Card(cost=[1, 1, 1, 1], managen=(C, C,), survival_chance=0.85),
+                "Chandra, Torch of Defiance": Card(cost=[1, 1, R, R], managen=(R, R,), survival_chance=0.67),
+                "Drowned Catacomb": Card(managen=((U, B,),), is_land=True),
+                "Sunken Ruins": Card(managen=((U, B),), is_land=True),  # TODO Needs to filter
 
                 # Filler Cards
                 "Concordant Crossroads": Card(cost=[G], survival_chance=0),
@@ -492,7 +493,21 @@ def create_cards():
                                                turn_effects=[lambda x: None] * 10),
                 "Gisela, Blade of Goldnight": Card(cost=[1, 1, 1, 1, W, W, R],
                                                    turn_effects=[lambda x: None] * 10,
-                                                   survival_chance=0)
+                                                   survival_chance=0),
+                "Keening Stone": Card(cost=[1, 1, 1, 1, 1, 1], survival_chance=0),
+                "Traumatize": Card(cost=[1, 1, 1, U, U], survival_chance=0),
+                "Jace, Memory Adept": Card(cost=[1, 1, 1, U, U], survival_chance=0),
+                "Sphinx's Tutelage": Card(cost=[1, 1, U], survival_chance=0),
+                "Mana Leak": Card(cost=[1, U], survival_chance=0),
+                "Tome Scour": Card(cost=[U], survival_chance=0),
+                "Mirko Vosk, Mind Drinker": Card(cost=[1, 1, 1, U, B], survival_chance=0),
+                "Consuming Abberation": Card(cost=[1, 1, 1, U, B], survival_chance=0),
+                "Jace's Phantasm": Card(cost=[U], survival_chance=0),
+                "Hedron Crab": Card(cost=[U], survival_chance=0),
+                "Mana Drain": Card(cost=[U, U], survival_chance=0),
+                "Negate": Card(cost=[1, U], survival_chance=0),
+                "Mind Funeral": Card(cost=[1, U, B], survival_chance=0),
+                "Startled Awake": Card(cost=[1, 1, U, U], survival_chance=0)
             }
 
 
@@ -500,36 +515,36 @@ cards = create_cards()
 
 
 # Lands based
-# def should_mulligan(hand):
-#     lands = 0
-#     #                   0  1  2  3  4  5  6  7
-#     lands_needed =     [0, 0, 1, 1, 2, 2, 3, 3] # noqa
-#     overloaded_lands = [1, 2, 3, 4, 5, 5, 5, 5] # noqa
-#     # overloaded_lands = [8] * 8
-#     found = False
-#     for card in hand:
-#         if card.is_land:
-#             lands += 1
-#         if card.name == "Metallurgic Summonings":
-#             lands += 2 if not found else -1
-#         if card.name == "Recycling":
-#             return False
-#     return lands < lands_needed[len(hand)]
-#     # return lands < lands_needed[len(hand)] or lands >= overloaded_lands[len(hand)]
-
-
 def should_mulligan(hand):
-    mana = 0
     lands = 0
-    mana_needed = [i - 2 for i in range(8)]
+    #                   0  1  2  3  4  5  6  7
+    lands_needed =     [0, 0, 1, 1, 2, 2, 3, 3] # noqa
+    overloaded_lands = [1, 2, 3, 4, 5, 5, 5, 5] # noqa
+    # overloaded_lands = [8] * 8
+    found = False
     for card in hand:
-        if len(card.managen) > 0 and not card.is_land:
-            mana += len(card.managen)
         if card.is_land:
             lands += 1
-    if lands >= 3:
-        mana += lands
-    return mana < mana_needed[len(hand)]
+        if card.name == "Metallurgic Summonings":
+            lands += 2 if not found else -1
+        if card.name == "Recycling":
+            return False
+    # return lands < lands_needed[len(hand)]
+    return lands < lands_needed[len(hand)] or lands >= overloaded_lands[len(hand)]
+
+
+# def should_mulligan(hand):
+#     mana = 0
+#     lands = 0
+#     mana_needed = [i - 2 for i in range(8)]
+#     for card in hand:
+#         if len(card.managen) > 0 and not card.is_land:
+#             mana += len(card.managen)
+#         if card.is_land:
+#             lands += 1
+#     if lands >= 3:
+#         mana += lands
+#     return mana < mana_needed[len(hand)]
 
 
 def should_play(env):
@@ -541,19 +556,28 @@ def should_play(env):
         for card in playable:
             if card.name == "Recycling" or len(card.mana_effects) > 0 or card.name == "Metallurgic Summonings":# or card.name == "Gisela, Blade of Goldnight": # noqa
                 yield card
-                playable.remove(card)
-        for card in playable:
-            if card.is_land:
-                yield card
                 break
         else:
             for card in playable:
-                if len(card.play_effects) > 0:
+                if card.is_land and card.name != "Swamp":
                     yield card
-                    playable.remove(card)
-            # random.shuffle(playable)
-            for card in sorted(playable, key=lambda x: -len(x.managen)):
-                yield card
+                    break
+            else:
+                for card in playable:
+                    if len(card.cost) == len(env['mana_pool']):
+                        yield card
+                        break
+                else:
+                    for card in playable:
+                        if len(card.play_effects) > 0:
+                            yield card
+                            break
+                    else:
+                        random.shuffle(playable)
+                        for card in playable:
+                            # for card in sorted(playable, key=lambda x: -len(x.managen)):
+                            yield card
+                            break
 
 
 def should_discard(env, num):
