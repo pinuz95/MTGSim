@@ -51,7 +51,7 @@ class Card:
                  mana_effects=[], is_land=False, survival_chance=1.0,
                  turn_effects=[], play_effects=[]):
         self.name = name
-        self.cost = cost
+        self.cost = cost[::-1]
         self.managen = managen
         self.delay = delay
         self.mana_effects = mana_effects
@@ -537,7 +537,7 @@ cards = create_cards()
 def should_mulligan(hand):
     lands = 0
     #                   0  1  2  3  4  5  6  7
-    lands_needed =     [0, 0, 1, 1, 2, 2, 3, 4] # noqa
+    lands_needed =     [0, 0, 1, 1, 2, 2, 3, 3] # noqa
     overloaded_lands = [1, 2, 3, 4, 5, 5, 5, 5] # noqa
     # overloaded_lands = [8] * 8
     for card in hand:
@@ -545,8 +545,8 @@ def should_mulligan(hand):
             lands += 1
         if card.name == "Recycling":
             return False
-    return lands < lands_needed[len(hand)]
-    # return lands < lands_needed[len(hand)] or lands >= overloaded_lands[len(hand)]
+    # return lands < lands_needed[len(hand)]
+    return lands < lands_needed[len(hand)] or lands >= overloaded_lands[len(hand)]
 
 
 # def should_mulligan(hand):
@@ -564,34 +564,24 @@ def should_mulligan(hand):
 
 
 def should_play(env):
-    important_cards = ["Genesis Wave", "Recycling", "Alhammarret's Archive",
-                       "Azusa, Lost but Seeking", "Patron of the Orochi"]
     filters = [
-                    ( # noqa
-                        lambda c: len(c.mana_effects) > 0,
-                        lambda c: -len(c.mana_effects)
-                    ),
-                    (
-                        lambda c: c.name in important_cards,
-                        lambda c: important_cards.index(c.name)
-                    ),
-                    (
-                        lambda c: len(c.managen) > 0,
-                        lambda c: c.delay
-                    ),
-                    (
-                        lambda c: len(c.play_effects) > 0 and c.name != "Draw Spell",
-                        lambda c: random.random()
-                    ),
-                    (
-                        lambda c: len(c.turn_effects) > 0,
-                        lambda c: random.random()
-                    ),
-                    (
-                        lambda c: c.name == "Draw Spell",
-                        lambda c: 1
-                    )
-                   ] # noqa
+                (
+                    lambda c: c.is_land and c.name != "Swamp",
+                    lambda c: 0 if c.name != "Island" else 1
+                ),
+                (
+                    lambda c: c.name == "Swamp",
+                    lambda c: 1
+                ),
+                (
+                    lambda c: len(env['mana_pool']) < 3 and c.name == "Hedron Crab",
+                    lambda c: 1
+                ),
+                (
+                    lambda c: len(c.cost) == len(env['mana_pool']),
+                    lambda c: random.random()
+                ),
+              ] # noqa
     while True:
         playable = [card for card in env['hand'] if card.can_play(env)]
         if len(playable) == 0:
@@ -770,40 +760,48 @@ def main(argv=None):
         cards_drawn += env['cards_drawn']
         cards_played += env['cards_played']
 
-    card_stats = defaultdict(lambda: [0, 0, 0, 0])
+    mana_at_turn = [0] * num_turns
+    for i, mana in enumerate(generated_mana):
+        mana_at_turn[i] = statistics.median(mana)
+
+    card_stats = defaultdict(lambda: [0, 0, 0, 0, 0, 0])
     spells_cast = [0] * num_turns
     total_spells_cast = 0
     for card, turn in cards_drawn:
         card_stats[card][0] += turn
         card_stats[card][2] += 1
+        card_obj = cards.get(card, FillerCard(name='Filler'))
+        if mana_at_turn[turn - 1] <= len(card_obj.cost):
+            card_stats[card][4] += 1
     for card, turn in cards_played:
         card_stats[card][1] += turn
         card_stats[card][3] += 1
         card_obj = cards.get(card, FillerCard(name='Filler'))
+        if mana_at_turn[turn - 1] <= len(card_obj.cost):
+            card_stats[card][5] += 1
         if not card_obj.is_land and card != "Draw Spell":
             spells_cast[turn - 1] += 1
             total_spells_cast += 1
 
     for i, mana in enumerate(generated_mana):
         print('Turn {:2.0f}: {:3.0f} median, {:3.2f} mean, and {:3.2f} stddev with {:3.2f} mean excess, and {:2.2f} spells cast'.format(i + 1, # noqa
-              statistics.median(mana), statistics.mean(mana), statistics.pstdev(mana), excess_mana[i],
+              mana_at_turn[i], statistics.mean(mana), statistics.pstdev(mana), excess_mana[i],
               spells_cast[i] / num_iterations))
     print('Max: {:.2f}'.format(max_mana))
     print('Average spells cast: {:2.2f}'.format(total_spells_cast / num_iterations))
     print('\n{:.2f} mean cards drawn'.format(len(cards_drawn) / num_iterations))
     print('{:.2f} mulligans per game\n'.format(average_mulligans))
     if not example:
-        for card, val in sorted(card_stats.items(), key=lambda x: x[1][3] / max(x[1][2], 1)):
-            if len(val) != 4:
-                print(val)
-            turn_drawn = float("inf") if val[2] == 0 else val[0] / val[2]
-            turn_played = float("inf") if val[3] == 0 else val[1] / val[3]
+        for card, val in sorted(card_stats.items(), key=lambda x: x[1][5] / max(x[1][4], 1)):
             play_to_draw = float("inf") if val[2] == 0 else val[3] / val[2] * 100
             percent_played = min(100, 100 * val[3] / num_iterations)
             percent_drawn = min(100, 100 * val[2] / num_iterations)
-            print('{} {} was drawn {:3.0f}% and played {:3.0f}% of games with play/draw ratio {:3.0f}%. On average {:1.0f} turns between drawing and playing'.format(card, # noqa
-                   ' ' * (30 - len(card)), percent_drawn, percent_played, play_to_draw,
-                   turn_played - turn_drawn))
+            draw_on_curve = val[4] / num_iterations
+            play_on_curve = val[5] / num_iterations
+            on_curve_ratio = float("inf") if draw_on_curve == 0 else play_on_curve / draw_on_curve
+            print('{} {} was drawn {:3.0f}% and played {:3.0f}% of games with play/draw ratio {:3.0f}%. Drawn {:3.0f}% and played {:3.0f}% with ratio {:3.0f}% on curve'.format(card, # noqa
+                    ' ' * (30 - len(card)), percent_drawn, percent_played, play_to_draw,
+                    draw_on_curve * 100, play_on_curve * 100, on_curve_ratio * 100))
 
 
 if __name__ == "__main__":
