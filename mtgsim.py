@@ -109,7 +109,7 @@ class Card:
         mana_generated = copy.copy(self.managen)
         for card in env['played_cards']:
             for effect in card.mana_effects:
-                effect(self, mana_generated)
+                mana_generated = effect(self, mana_generated)
         # print('{} generated {}'.format(self.name, mana_generated))
         env['mana_pool'] += mana_generated
         env['mana_generated'] += len(mana_generated)
@@ -137,6 +137,7 @@ def increase_land_plays(n):
 def increase_from_forests(card, mana):
     if card.name == 'Forest':
         mana += ('G',)
+    return mana
 
 
 def draw_land_if_top(env):
@@ -165,6 +166,7 @@ def draw_cards_effect(n):
 def double_land(card, mana):
     if card.is_land and len(card.managen) > 0:
         mana += (random.choice(mana),)
+    return mana
 
 
 def add_effect_spell(cost, effect, name=None, repeatable=False):
@@ -184,6 +186,7 @@ def add_effect_spell(cost, effect, name=None, repeatable=False):
 
 def double_gen(card, mana):
     mana += mana
+    return mana
 
 
 def recycle_effect(env):
@@ -269,19 +272,20 @@ def genesis_wave_effect(env):
 
 
 def search_basic_land(env):
-    # basic_lands = ["Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes"]
-    basic_lands = ["Plains"]
+    basic_lands = ["Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes"]
+    # basic_lands = ["Plains"]
     for card in env['library']:
         if card.name in basic_lands:
             env['hand'].append(card)
             env['library'].remove(card)
             random.shuffle(env['library'])
+            env['played_cards'].append(card)
             break
 
 
 def basic_land_to_battlefield(env):
-    # basic_lands = ["Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes"]
-    basic_lands = ["Plains"]
+    basic_lands = ["Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes"]
+    # basic_lands = ["Plains"]
     for card in env['library']:
         if card.name in basic_lands:
             card.play(env, free=True)
@@ -322,7 +326,7 @@ def create_cards():
                 'Azusa, Lost but Seeking': Card(cost=[1, 1, G], survival_chance=0.75,
                                                 turn_effects=[increase_land_plays(2)],
                                                 play_effects=[increase_land_plays(2)]),
-                'Exploration': Card(cost=[1, G], survival_chance=0.95,
+                'Exploration': Card(cost=[G], survival_chance=0.95,
                                     turn_effects=[increase_land_plays(1)],
                                     play_effects=[increase_land_plays(1)]),
                 'Ghirapur Orrery': Card(cost=[1, 1, 1, 1], survival_chance=0.90,
@@ -458,12 +462,21 @@ def create_cards():
                 "Chandra, Torch of Defiance": Card(cost=[1, 1, R, R], managen=(R, R,), survival_chance=0.67),
                 "Drowned Catacomb": Card(managen=((U, B,),), is_land=True),
                 "Sunken Ruins": Card(managen=((U, B),), is_land=True),  # TODO Needs to filter
-                "Concordant Crossroads": Card(cost=[G], survival_chance=0,
+                "Concordant Crossroads": Card(cost=[G], survival_chance=0.95,
                                               play_effects=[remove_delay],
                                               turn_effects=[remove_delay]),
-                "Akroma's Memorial": Card(cost=[1] * 7, survival_chance=0,
+                "Akroma's Memorial": Card(cost=[1] * 7, survival_chance=0.8,
                                           play_effects=[remove_delay],
                                           turn_effects=[remove_delay]),
+                "Kodama's Reach": Card(cost=[1, 1, G], survival_chance=0,
+                                       play_effects=[basic_land_to_battlefield,
+                                                     search_basic_land]),
+                "Cultivate": Card(cost=[1, 1, G], survival_chance=0,
+                                  play_effects=[basic_land_to_battlefield,
+                                                search_basic_land]),
+
+
+
 
                 # Filler Cards
                 'Quirion Ranger': Card(cost=[G],  # turn_effects=[bounce_forest],
@@ -510,7 +523,7 @@ def create_cards():
                 "Primordial Hydra": Card(cost=[1, 1, 1, 1, G, G], survival_chance=0),
                 "Metallurgic Summonings": Card(cost=[1, 1, 1, U, U], survival_chance=0,
                                                turn_effects=[lambda x: None] * 10),
-                "Gisela, Blade of Goldnight": Card(cost=[1, 1, 1, 1, W, W, R],
+                "Gisela, Blade of Goldnight": Card(cost=[1, 1, 1, 1, R, W, W],
                                                    turn_effects=[lambda x: None] * 10,
                                                    survival_chance=0),
                 "Keening Stone": Card(cost=[1, 1, 1, 1, 1, 1], survival_chance=0),
@@ -545,8 +558,8 @@ def should_mulligan(hand):
             lands += 1
         if card.name == "Recycling":
             return False
-    # return lands < lands_needed[len(hand)]
-    return lands < lands_needed[len(hand)] or lands >= overloaded_lands[len(hand)]
+    return lands < lands_needed[len(hand)]
+    # return lands < lands_needed[len(hand)] or lands >= overloaded_lands[len(hand)]
 
 
 # def should_mulligan(hand):
@@ -563,25 +576,74 @@ def should_mulligan(hand):
 #     return mana < mana_needed[len(hand)]
 
 
+# def should_play(env):
+#     filters = [
+#                 (
+#                     lambda c: c.is_land and c.name != "Swamp",
+#                     lambda c: 0 if c.name != "Island" else 1
+#                 ),
+#                 (
+#                     lambda c: c.name == "Swamp",
+#                     lambda c: 1
+#                 ),
+#                 (
+#                     lambda c: len(env['mana_pool']) < 3 and c.name == "Hedron Crab",
+#                     lambda c: 1
+#                 ),
+#                 (
+#                     lambda c: len(c.cost) == len(env['mana_pool']),
+#                     lambda c: random.random()
+#                 ),
+#               ] # noqa
+#     while True:
+#         playable = [card for card in env['hand'] if card.can_play(env)]
+#         if len(playable) == 0:
+#             break
+#         if env['example']:
+#             print('Playable: ', ', '.join(['{}'] * len(playable)).format(*sorted(playable,
+#                                                                                  key=lambda x: x.name)))
+#         for func, key in filters:
+#             choices = [card for card in playable if func(card)]
+#             if len(choices) > 0:
+#                 # if env['example']:
+#                 #     print("Using a choice function")
+#                 yield sorted(choices, key=key)[0]
+#                 break
+#         else:
+#             # if env['example']:
+#             #     print("Couldn't find anything good to play so random")
+#             yield random.choice(playable)
+
+
 def should_play(env):
+    important_cards = ["Genesis Wave", "Recycling", "Alhammarret's Archive", "Gisela, Blade of Goldnight",
+                       "Azusa, Lost but Seeking", "Patron of the Orochi", "Exploration"]
     filters = [
-                (
-                    lambda c: c.is_land and c.name != "Swamp",
-                    lambda c: 0 if c.name != "Island" else 1
-                ),
-                (
-                    lambda c: c.name == "Swamp",
-                    lambda c: 1
-                ),
-                (
-                    lambda c: len(env['mana_pool']) < 3 and c.name == "Hedron Crab",
-                    lambda c: 1
-                ),
-                (
-                    lambda c: len(c.cost) == len(env['mana_pool']),
-                    lambda c: random.random()
-                ),
-              ] # noqa
+                    ( # noqa
+                        lambda c: len(c.mana_effects) > 0,
+                        lambda c: -len(c.mana_effects)
+                    ),
+                    (
+                        lambda c: c.name in important_cards,
+                        lambda c: important_cards.index(c.name)
+                    ),
+                    (
+                        lambda c: len(c.play_effects) > 0 and c.name != "Draw Spell",
+                        lambda c: random.random()
+                    ),
+                    (
+                        lambda c: len(c.managen) > 0,
+                        lambda c: c.delay
+                    ),
+                    (
+                        lambda c: len(c.turn_effects) > 0,
+                        lambda c: random.random()
+                    ),
+                    (
+                        lambda c: c.name == "Draw Spell",
+                        lambda c: 1
+                    )
+                   ] # noqa
     while True:
         playable = [card for card in env['hand'] if card.can_play(env)]
         if len(playable) == 0:
